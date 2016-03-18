@@ -5,21 +5,108 @@ output:
     keep_md: true
 ---
 
+setwd("~/github/RepData_PeerAssessment1")
 
 ## Loading and preprocessing the data
+Download the archive from the Coursera website link, and unzip and load the data into R.
+Export the raw data to a csv file.
+
+The file was downloaded from: https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip at:
+```{r}
+Sys.Date()
+```
 
 
+```{r}
+temp <- tempfile()
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip",temp)
+activity_data <- read.csv(unz(temp, "activity.csv"),stringsAsFactors = FALSE)
+unlink(temp)
+write.csv(activity_data,"activity_data_raw.csv")
+```
+
+Convert dates in the dataset.  Then categorize each day as a weekday or weekend day.
+
+```{r}
+activity_data$date <- as.Date(activity_data$date, "%Y-%m-%d")
+library(chron)
+activity_data$day <- ifelse(is.weekend(activity_data$date), "Weekend", "Weekday")
+activity_data$day <- as.factor(activity_data$day)
+```
+
+Verify that the data frame structure is correct:
+```{r}
+str(activity_data)
+```
 
 ## What is mean total number of steps taken per day?
+Calculate the mean and median steps per day.  Then plot a histogram of steps per day. NAs are removed for this analysis.
 
+```{r}
+library(dplyr)
+library(magrittr)
+daily_steps_total <- activity_data %>% group_by(date) %>% summarise_each(funs(sum(steps, na.rm = TRUE)))
+daily_steps_total <- daily_steps_total[,c(1,2)]
+summary(daily_steps_total)
 
+hist(daily_steps_total$steps, breaks=12, col="red",xlab="Total Daily Steps", 
+  	main="Histogram of Total Daily Steps")
+```
 
 ## What is the average daily activity pattern?
+Calculate the average daily pattern by time interval, and then graph it.  NAs are removed.
 
-
+```{r}
+interval.steps <- activity_data %>% group_by(interval) %>% summarise_each(funs(mean(steps, na.rm = TRUE)))
+interval.steps <- interval.steps[,c(1,2)]
+plot(interval.steps$interval, interval.steps$steps, type="l", main="Average Daily Steps by 5 min interval", xlab = "5 min Interval (hours+mins)", ylab = "Mean Steps")
+```
 
 ## Imputing missing values
+How many NAs are there?  Replace NAs with mean steps/interval.  How is the replaced dataset different?
+```{r}
+summary(activity_data)
+impute.mean <- function(x) replace(x, is.na(x), mean(x, na.rm = TRUE))
+activity_data.adj <- activity_data %>%
+    group_by(interval) %>%
+    mutate(
+        steps = impute.mean(steps)
+    )
+summary(activity_data.adj)
+write.csv(activity_data.adj,"activity data with NA replaced.csv")
+daily_steps_total.adj <- activity_data.adj %>% group_by(date) %>% summarise_each(funs(sum(steps, na.rm = TRUE)))
+daily_steps_total.adj <- daily_steps_total.adj[,c(1,2)]
+summary(daily_steps_total.adj)
 
+hist(daily_steps_total.adj$steps, breaks=12, col="red",xlab="Total Daily Steps", 
+  	main="Histogram of Total Daily Steps, NAs replaced")
 
+replaced1 <- c(mean(daily_steps_total$steps, na.rm = TRUE), mean(daily_steps_total.adj$steps))
+replaced2 <- c(median(daily_steps_total$steps, na.rm = TRUE), median(daily_steps_total.adj$steps, na.rm=TRUE))
+replacement <- rbind(replaced1,replaced2)
+rm(replaced1)
+rm(replaced2)
+rownames(replacement) <- c("mean steps","median steps")
+colnames(replacement) <- c("NAs Removed", "NAs Replaced")
+replacement
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+Subset data into weekend and weekday tables.  This is using the NAs replaced dataset.  Then average weekday/weekend activities are graphed.
+```{r}
+weekend_activity.adj <- activity_data.adj[which(activity_data.adj$day == "Weekend"),]
+weekday_activity.adj <- activity_data.adj[which(activity_data.adj$day == "Weekday"),]
+
+interval.steps_weekday <- weekday_activity.adj %>% group_by(interval) %>% summarise_each(funs(mean(steps, na.rm = TRUE)))
+interval.steps_weekday <- interval.steps_weekday[,c(1,2)]
+plot(interval.steps_weekday$interval, interval.steps_weekday$steps, type="l", main="Average Weekday Steps by 5 min interval", xlab = "5 min Interval (hours+mins)", ylab = "Mean Steps")
+
+summary(weekday_activity.adj)
+
+interval.steps_weekend <- weekend_activity.adj %>% group_by(interval) %>% summarise_each(funs(mean(steps, na.rm = TRUE)))
+interval.steps_weekend <- interval.steps_weekend[,c(1,2)]
+plot(interval.steps_weekend$interval, interval.steps_weekend$steps, type="l", main="Average Weekend Day Steps by 5 min interval", xlab = "5 min Interval (hours+mins)", ylab = "Mean Steps")
+
+summary(weekend_activity.adj)
+```
+It would appear that although the peak steps occurs around the same time for weekdays and weekends, that there is a generally higher level of steps throughout the rest of the day for weekend days in this dataset.
